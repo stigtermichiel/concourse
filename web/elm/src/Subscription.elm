@@ -1,10 +1,20 @@
-port module Subscription exposing (Subscription(..), map, runSubscription)
+port module Subscription exposing
+    ( Subscription(..)
+    , map
+    , runSubscription
+    , subscribe
+    )
 
 import AnimationFrame
+import Build.Msgs
+import Concourse.BuildEvents as BuildEvents
+import Effects
 import EventSource
 import Keyboard
 import Mouse
+import Msgs exposing (Msg)
 import Scroll
+import SubPage.Msgs
 import Time
 import Window
 
@@ -25,15 +35,15 @@ type Subscription m
     | OnKeyUp (Keyboard.KeyCode -> m)
     | OnScrollFromWindowBottom (Scroll.FromBottom -> m)
     | OnWindowResize (Window.Size -> m)
-    | FromEventSource ( String, List String ) (EventSource.Msg -> m)
+    | FromEventSource ( String, List String )
     | OnNewUrl (String -> m)
     | OnTokenReceived (Maybe String -> m)
     | Conditionally Bool (Subscription m)
     | WhenPresent (Maybe (Subscription m))
 
 
-runSubscription : Subscription m -> Sub m
-runSubscription s =
+runSubscription : Effects.LayoutDispatch -> Subscription Msg -> Sub Msg
+runSubscription disp s =
     case s of
         OnClockTick t m ->
             Time.every t m
@@ -62,8 +72,16 @@ runSubscription s =
         OnWindowResize m ->
             Window.resizes m
 
-        FromEventSource key m ->
-            EventSource.listen key m
+        FromEventSource key ->
+            case disp of
+                Effects.SubPage navIndex ->
+                    EventSource.listen key BuildEvents.parseMsg
+                        |> Sub.map Build.Msgs.BuildEventsMsg
+                        |> Sub.map SubPage.Msgs.BuildMsg
+                        |> Sub.map (Msgs.SubMsg navIndex)
+
+                _ ->
+                    Sub.none
 
         OnNewUrl m ->
             newUrl m
@@ -72,16 +90,21 @@ runSubscription s =
             tokenReceived m
 
         Conditionally True m ->
-            runSubscription m
+            runSubscription disp m
 
         Conditionally False m ->
             Sub.none
 
         WhenPresent (Just s) ->
-            runSubscription s
+            runSubscription disp s
 
         WhenPresent Nothing ->
             Sub.none
+
+
+subscribe : Int -> Subscription m
+subscribe build =
+    FromEventSource ( "/api/v1/builds/" ++ toString build ++ "/events", [ "end", "event" ] )
 
 
 map : (m -> n) -> Subscription m -> Subscription n
@@ -114,8 +137,8 @@ map f s =
         OnWindowResize m ->
             OnWindowResize (m >> f)
 
-        FromEventSource key m ->
-            FromEventSource key (m >> f)
+        FromEventSource key ->
+            FromEventSource key
 
         OnNewUrl m ->
             OnNewUrl (m >> f)

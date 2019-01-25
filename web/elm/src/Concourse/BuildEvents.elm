@@ -12,7 +12,6 @@ module Concourse.BuildEvents exposing
     , parseEvents
     , parseEventsFromIndex
     , parseMsg
-    , subscribe
     )
 
 import Array exposing (Array)
@@ -22,7 +21,6 @@ import Dict exposing (Dict)
 import EventSource
 import EventSource.LowLevel as ES
 import Json.Decode
-import Subscription exposing (Subscription(..))
 
 
 type BuildEvent
@@ -109,11 +107,6 @@ decodeBuildEvent eventType =
 
         unknown ->
             Json.Decode.fail ("unknown event type: " ++ unknown)
-
-
-subscribe : Int -> Subscription Msg
-subscribe build =
-    FromEventSource ( "/api/v1/builds/" ++ toString build ++ "/events", [ "end", "event" ] ) parseMsg
 
 
 parseEvents : Array.Array ES.Event -> Result String (Array.Array BuildEvent)

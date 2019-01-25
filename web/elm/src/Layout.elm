@@ -389,17 +389,19 @@ view model =
                 ]
 
 
-subscriptions : Model -> List (Subscription Msg)
+subscriptions : Model -> List ( LayoutDispatch, Subscription Msg )
 subscriptions model =
-    [ OnNewUrl NewUrl
-    , OnTokenReceived TokenReceived
+    [ ( Layout, OnNewUrl NewUrl )
+    , ( Layout, OnTokenReceived TokenReceived )
     ]
         ++ (SubPage.subscriptions model.subModel
                 |> List.map (Subscription.map (SubMsg model.navIndex))
+                |> List.map (\s -> ( SubPage model.navIndex, s ))
            )
         ++ (TopBar.subscriptions model.topModel
                 |> List.map (Subscription.map (TopMsg model.navIndex))
                 |> List.map (Conditionally (model.topBarType == Normal))
+                |> List.map (\s -> ( TopBar model.navIndex, s ))
            )
 
 

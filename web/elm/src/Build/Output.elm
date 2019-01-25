@@ -120,7 +120,7 @@ planAndResourcesFetched result model =
             case err of
                 Http.BadStatus { status } ->
                     if status.code == 404 then
-                        ( { model | events = Just (subscribeToEvents model.build.id) }
+                        ( { model | events = Just (Subscription.subscribe model.build.id) }
                         , []
                         , OutNoop
                         )
@@ -135,7 +135,7 @@ planAndResourcesFetched result model =
         Ok ( plan, resources ) ->
             ( { model
                 | steps = Just (StepTree.init model.highlight resources plan)
-                , events = Just (subscribeToEvents model.build.id)
+                , events = Just (Subscription.subscribe model.build.id)
               }
             , []
             , OutNoop
@@ -349,11 +349,6 @@ setResourceInfo version metadata tree =
 setStepState : StepTree.StepState -> StepTree -> StepTree
 setStepState state tree =
     StepTree.map (\step -> { step | state = state }) tree
-
-
-subscribeToEvents : Int -> Subscription Msg
-subscribeToEvents buildId =
-    Subscription.map BuildEventsMsg (Concourse.BuildEvents.subscribe buildId)
 
 
 view : Model -> Html Msg
