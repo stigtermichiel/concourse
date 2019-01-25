@@ -8,6 +8,7 @@ module Concourse.BuildEvents exposing
     , decodeErrorEvent
     , decodeFinishResource
     , decodeOrigin
+    , isEndMsg
     , parseEvent
     , parseEvents
     , parseEventsFromIndex
@@ -46,6 +47,18 @@ type alias Origin =
     { source : String
     , id : String
     }
+
+
+isEndMsg : Msg -> Bool
+isEndMsg msg =
+    case msg of
+        Events (Ok events) ->
+            events
+                |> Array.toList
+                |> List.member End
+
+        _ ->
+            False
 
 
 decodeBuildEventEnvelope : Json.Decode.Decoder BuildEvent

@@ -33,7 +33,6 @@ import Html.Attributes
 import Http
 import LoadingIndicator
 import NotAuthorized
-import Subscription exposing (Subscription(..))
 
 
 type alias Model =
@@ -42,7 +41,6 @@ type alias Model =
     , errors : Maybe Ansi.Log.Model
     , state : OutputState
     , eventSourceOpened : Bool
-    , events : Maybe (Subscription Msg)
     , highlight : StepTree.Highlight
     }
 
@@ -78,7 +76,6 @@ init flags build =
             , steps = Nothing
             , errors = Nothing
             , state = outputState
-            , events = Nothing
             , eventSourceOpened = False
             , highlight = StepTree.parseHighlight flags.hash
             }
@@ -119,24 +116,14 @@ planAndResourcesFetched result model =
         Err err ->
             case err of
                 Http.BadStatus { status } ->
-                    if status.code == 404 then
-                        ( { model | events = Just (Subscription.subscribe model.build.id) }
-                        , []
-                        , OutNoop
-                        )
-
-                    else
-                        ( model, [], OutNoop )
+                    ( model, [], OutNoop )
 
                 _ ->
                     flip always (Debug.log "failed to fetch plan" err) <|
                         ( model, [], OutNoop )
 
         Ok ( plan, resources ) ->
-            ( { model
-                | steps = Just (StepTree.init model.highlight resources plan)
-                , events = Just (Subscription.subscribe model.build.id)
-              }
+            ( { model | steps = Just (StepTree.init model.highlight resources plan) }
             , []
             , OutNoop
             )
@@ -277,7 +264,7 @@ handleEvent event model =
             )
 
         Concourse.BuildEvents.End ->
-            ( { model | state = StepsComplete, events = Nothing }, [], OutNoop )
+            ( { model | state = StepsComplete }, [], OutNoop )
 
 
 updateStep : StepTree.StepID -> (StepTree -> StepTree) -> Model -> Model

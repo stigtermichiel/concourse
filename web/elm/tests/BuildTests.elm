@@ -16,6 +16,7 @@ import Dict
 import Effects
 import Expect
 import Html.Attributes as Attr
+import Subscription
 import Test exposing (..)
 import Test.Html.Query as Query
 import Test.Html.Selector
@@ -685,6 +686,98 @@ all =
                                 ]
                             ]
             ]
+        , describe "build events subscription" <|
+            let
+                buildPlanReceived =
+                    \_ ->
+                        pageLoad
+                            |> Tuple.first
+                            |> fetchStartedBuild
+                            |> Tuple.first
+                            |> fetchHistory
+                            |> Tuple.first
+                            |> fetchJobDetails
+                            |> Tuple.first
+                            |> Build.handleCallback
+                                (Callback.PlanAndResourcesFetched 1 <|
+                                    Ok <|
+                                        ( { id = "plan"
+                                          , step =
+                                                Concourse.BuildStepGet
+                                                    "step"
+                                                    Nothing
+                                          }
+                                        , { inputs = [], outputs = [] }
+                                        )
+                                )
+            in
+            [ test "after build plan is received, opens event stream" <|
+                buildPlanReceived
+                    >> Expect.all
+                        [ Tuple.second
+                            >> Expect.equal
+                                [ Effects.OpenBuildEventStream
+                                    "/api/v1/builds/1/events"
+                                    [ "end", "event" ]
+                                ]
+                        , Tuple.first
+                            >> Build.subscriptions
+                            >> List.member
+                                (Subscription.FromEventSource
+                                    ( "/api/v1/builds/1/events"
+                                    , [ "end", "event" ]
+                                    )
+                                )
+                            >> Expect.true "build event not subscribed"
+                        ]
+            , test "after build updates, keeps event stream open" <|
+                buildPlanReceived
+                    >> Tuple.first
+                    >> Build.update
+                        (Msgs.BuildEventsMsg <|
+                            BuildEvents.Events <|
+                                Ok <|
+                                    Array.fromList
+                                        [ BuildEvents.StartTask
+                                            { source = ""
+                                            , id = "plan"
+                                            }
+                                        ]
+                        )
+                    >> Tuple.first
+                    >> Build.subscriptions
+                    >> List.member
+                        (Subscription.FromEventSource
+                            ( "/api/v1/builds/1/events"
+                            , [ "end", "event" ]
+                            )
+                        )
+                    >> Expect.true "build event not subscribed"
+            , test "after build ends, closes event stream" <|
+                buildPlanReceived
+                    >> Tuple.first
+                    >> Build.update
+                        (Msgs.BuildEventsMsg <|
+                            BuildEvents.Events <|
+                                Ok <|
+                                    Array.fromList
+                                        [ BuildEvents.StartTask
+                                            { source = ""
+                                            , id = "plan"
+                                            }
+                                        , BuildEvents.End
+                                        ]
+                        )
+                    >> Tuple.first
+                    >> Build.subscriptions
+                    >> List.member
+                        (Subscription.FromEventSource
+                            ( "/api/v1/builds/1/events"
+                            , [ "end", "event" ]
+                            )
+                        )
+                    >> Expect.false "build event still subscribed"
+            ]
         , describe "step header" <|
             let
                 setup : () -> Build.Model
@@ -698,7 +791,7 @@ all =
                         |> fetchJobDetails
                         |> Tuple.first
                         |> Build.handleCallback
-                            (Callback.PlanAndResourcesFetched <|
+                            (Callback.PlanAndResourcesFetched 1 <|
                                 Ok <|
                                     ( { id = "plan"
                                       , step =
@@ -759,7 +852,7 @@ all =
                         |> fetchJobDetails
                         |> Tuple.first
                         |> Build.handleCallback
-                            (Callback.PlanAndResourcesFetched <|
+                            (Callback.PlanAndResourcesFetched 1 <|
                                 Ok <|
                                     ( { id = "plan"
                                       , step =
@@ -792,7 +885,7 @@ all =
                         |> fetchJobDetails
                         |> Tuple.first
                         |> Build.handleCallback
-                            (Callback.PlanAndResourcesFetched <|
+                            (Callback.PlanAndResourcesFetched 1 <|
                                 Ok <|
                                     ( { id = "plan"
                                       , step = Concourse.BuildStepPut "step"
@@ -823,7 +916,7 @@ all =
                         |> fetchJobDetails
                         |> Tuple.first
                         |> Build.handleCallback
-                            (Callback.PlanAndResourcesFetched <|
+                            (Callback.PlanAndResourcesFetched 1 <|
                                 let
                                     version =
                                         Dict.fromList
@@ -921,7 +1014,7 @@ all =
                         |> fetchJobDetails
                         |> Tuple.first
                         |> Build.handleCallback
-                            (Callback.PlanAndResourcesFetched <|
+                            (Callback.PlanAndResourcesFetched 1 <|
                                 Ok <|
                                     ( { id = "plan"
                                       , step =

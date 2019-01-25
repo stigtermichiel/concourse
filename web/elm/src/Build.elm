@@ -19,6 +19,7 @@ import BuildDuration
 import Callback exposing (Callback(..))
 import Char
 import Concourse
+import Concourse.BuildEvents as BuildEvents
 import Concourse.BuildStatus
 import Concourse.Pagination exposing (Paginated)
 import Date exposing (Date)
@@ -45,7 +46,7 @@ import Html.Events exposing (onBlur, onFocus, onMouseEnter, onMouseLeave)
 import Html.Lazy
 import Http
 import LoadingIndicator
-import Maybe.Extra
+import Maybe.Extra exposing (maybeToList)
 import RemoteData exposing (WebData)
 import Routes
 import Spinner
@@ -98,6 +99,7 @@ type alias Model =
     , showHelp : Bool
     , hash : String
     , hoveredButton : HoveredButton
+    , eventStreamOpen : Bool
     }
 
 
@@ -138,6 +140,7 @@ init flags page =
                 , showHelp = False
                 , hash = flags.hash
                 , hoveredButton = Neither
+                , eventStreamOpen = False
                 }
     in
     ( model, effects ++ [ GetCurrentTime ] )
@@ -152,12 +155,25 @@ subscriptions model =
     , Conditionally
         (getScrollBehavior model /= NoScroll)
         (OnAnimationFrame ScrollDown)
-    , model.currentBuild
-        |> RemoteData.toMaybe
-        |> Maybe.andThen .output
-        |> Maybe.andThen .events
-        |> WhenPresent
     ]
+        ++ (if model.eventStreamOpen then
+                model.currentBuild
+                    |> RemoteData.toMaybe
+                    |> Maybe.map (.build >> .id)
+                    |> Maybe.map eventStreamSubscription
+                    |> maybeToList
+
+            else
+                []
+           )
+
+
+eventStreamSubscription : Int -> Subscription m
+eventStreamSubscription buildId =
+    FromEventSource
+        ( "/api/v1/builds/" ++ toString buildId ++ "/events"
+        , [ "end", "event" ]
+        )
 
 
 changeToBuild : Page -> Model -> ( Model, List Effect )
@@ -258,8 +274,20 @@ handleCallback action model =
             flip always (Debug.log "failed to fetch build preparation" err) <|
                 ( model, [] )
 
-        PlanAndResourcesFetched result ->
-            updateOutput (Build.Output.planAndResourcesFetched result) model
+        PlanAndResourcesFetched buildId result ->
+            let
+                ( newModel, effects ) =
+                    updateOutput
+                        (Build.Output.planAndResourcesFetched result)
+                        model
+            in
+            ( { newModel | eventStreamOpen = True }
+            , effects
+                ++ [ OpenBuildEventStream
+                        ("/api/v1/builds/" ++ toString buildId ++ "/events")
+                        [ "end", "event" ]
+                   ]
+            )
 
         BuildHistoryFetched (Err err) ->
             flip always (Debug.log "failed to fetch build history" err) <|
@@ -300,7 +328,15 @@ update action model =
             ( model, [ DoAbortBuild buildId model.csrfToken ] )
 
         BuildEventsMsg action ->
-            updateOutput (Build.Output.handleEventsMsg action) model
+            let
+                ( newModel, effects ) =
+                    updateOutput (Build.Output.handleEventsMsg action) model
+
+                eventStreamStillOpen =
+                    newModel.eventStreamOpen
+                        && not (BuildEvents.isEndMsg action)
+            in
+            ( { newModel | eventStreamOpen = eventStreamStillOpen }, effects )
 
         ToggleStep id ->
             updateOutput

@@ -190,6 +190,12 @@
         }
       }, false);
 
+      app.ports.openBuildEventStream.subscribe(function(url) {
+        //var source = new EventSource(url);
+        //var buffer = [];
+        console.log(`opening stream from ${url}`);
+      });
+
     </script>
     <script>
       var clipboard = new ClipboardJS('#copy-token');

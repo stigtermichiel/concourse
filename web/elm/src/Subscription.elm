@@ -2,7 +2,6 @@ port module Subscription exposing
     ( Subscription(..)
     , map
     , runSubscription
-    , subscribe
     )
 
 import AnimationFrame
@@ -100,11 +99,6 @@ runSubscription disp s =
 
         WhenPresent Nothing ->
             Sub.none
-
-
-subscribe : Int -> Subscription m
-subscribe build =
-    FromEventSource ( "/api/v1/builds/" ++ toString build ++ "/events", [ "end", "event" ] )
 
 
 map : (m -> n) -> Subscription m -> Subscription n
